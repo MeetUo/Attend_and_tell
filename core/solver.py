@@ -118,7 +118,7 @@ class CaptioningSolver(object):
             curr_loss = 0
             start_t = time.time()
             features_size = 8000;
-            for index in range(start_index,3):
+            for index in range(start_index,5):
                 print("Now train id: %d" %index);
                 # recompute the index for feature
                 start = features_size * index * 5
@@ -131,7 +131,7 @@ class CaptioningSolver(object):
                 print("Load train.features%d.hkl successfully" % index)
                 n_examples = features.shape[0]
                 n_iters_per_epoch = int(np.ceil(float(n_examples) / self.batch_size))
-                end = start + n_examples
+                end = start + n_examples*5
 
                 # reset the index
                 rand_idxs_fix = [i for i in range(start, end)
@@ -139,15 +139,13 @@ class CaptioningSolver(object):
                 captions1 = captions[rand_idxs_fix]
                 image_idxs1 = image_idxs[rand_idxs_fix]
                 for e in range(self.n_epochs):
-                    rand_idxs = np.random.permutation(n_examples)
-                    captions1 = captions1[rand_idxs]
-                    image_idxs1 = image_idxs1[rand_idxs]
+                    rand_idxs = np.random.permutation(n_examples*5)[0:n_examples]
+                    captions2 = captions1[rand_idxs]
+                    image_idxs2 = image_idxs1[rand_idxs]
                     print("Index: %d,Epochs: %d,Train Data Size: %d" % (index,e,len(image_idxs1)))
-                    for i in range(
-
-                    ):
-                        captions_batch = captions1[i * self.batch_size:(i + 1) * self.batch_size]
-                        image_idxs_batch = image_idxs1[i * self.batch_size:(i + 1) * self.batch_size] % features_size
+                    for i in range(n_iters_per_epoch):
+                        captions_batch = captions2[i * self.batch_size:(i + 1) * self.batch_size]
+                        image_idxs_batch = image_idxs2[i * self.batch_size:(i + 1) * self.batch_size] % features_size
                         features_batch = features[image_idxs_batch]
                         # print("WH test", image_idxs_batch.shape)
                         # print("WH test", image_idxs_batch)

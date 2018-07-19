@@ -10,6 +10,7 @@ def load_coco_data(data_path='./data', split='train'):
     start_t = time.time()
     data = {}
 
+    # when you test should cancel the annotation about next sentence
     # data['features'] = hickle.load(os.path.join(data_path, '%s.features.hkl' % split))
     with open(os.path.join(data_path, '%s.file.names.pkl' % split), 'rb') as f:
         data['file_names'] = pickle.load(f)
