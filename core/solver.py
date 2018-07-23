@@ -61,8 +61,9 @@ class CaptioningSolver(object):
     def train(self):
         # train/val dataset
         # features = self.data['features']
-        captions = self.data['captions']
-        image_idxs = self.data['image_idxs']
+        captions = np.array(self.data['captions'])
+        image_idxs = np.array(self.data['image_idxs'])
+        idex_s_e = self.data['idex_s_e']
 
         # val_features = self.val_data['features']
         # n_iters_val = int(np.ceil(float(val_features.shape[0]) / self.batch_size))
@@ -81,33 +82,19 @@ class CaptioningSolver(object):
             grads_and_vars = list(zip(grads, tf.trainable_variables()))
             train_op = optimizer.apply_gradients(grads_and_vars=grads_and_vars)
 
-        # summary op
-        # tf.scalar_summary('batch_loss', loss)
-        tf.summary.scalar('batch_loss', loss)
-        for var in tf.trainable_variables():
-            # tf.histogram_summary(var.op.name, var)
-            tf.summary.histogram(var.op.name, var)
-        for grad, var in grads_and_vars:
-            # tf.histogram_summary(var.op.name+'/gradient', grad)
-            tf.summary.histogram(var.op.name + '/gradient', grad)
-
-        # summary_op = tf.merge_all_summaries()
-        summary_op = tf.summary.merge_all()
-
         print("The number of epoch: %d" % self.n_epochs)
         print("Batch size: %d" % self.batch_size)
 
         # because fix bug the feature0 has trained save in /model
         start_index = 0;
-        if (os.path.exists("log/now_index.pkl")):
-            start_index = load_pickle("log/now_index.pkl")+1
+        if (os.path.exists("ch_log/now_index.pkl")):
+            start_index = load_pickle("ch_log/now_index.pkl")+1
         config = tf.ConfigProto(allow_soft_placement=True)
         # config.gpu_options.per_process_gpu_memory_fraction=0.9
         config.gpu_options.allow_growth = True
         with tf.Session(config=config) as sess:
             tf.global_variables_initializer().run()
-            # summary_writer = tf.train.SummaryWriter(self.log_path, graph=tf.get_default_graph())
-            summary_writer = tf.summary.FileWriter(self.log_path, graph=tf.get_default_graph())
+
             saver = tf.train.Saver(max_to_keep=40)
 
             if self.pretrained_model is not None:
@@ -117,28 +104,21 @@ class CaptioningSolver(object):
             prev_loss = -1
             curr_loss = 0
             start_t = time.time()
-            features_size = 8000;
+            features_size = 10000;
             for index in range(start_index,5):
-                print("Now train id: %d" %index);
+                print("Now train id: %d" %index)
                 # recompute the index for feature
-                start = features_size * index * 5
-                if (start >= len(captions)): break
-                features_start = features_size * index
-
+                start,end = idex_s_e[index]
                 # Changed this because I keep less features than captions, see prepro
                 # n_examples = self.data['captions'].shape[0]
-                features = hickle.load(os.path.join('./data/train/train.features%d.hkl' % index))
+                features = hickle.load(os.path.join('./ch_data/train/train.features%d.hkl' % index))
                 print("Load train.features%d.hkl successfully" % index)
                 n_examples = features.shape[0]
+                # n_examples = 10000
                 n_iters_per_epoch = int(np.ceil(float(n_examples) / self.batch_size))
-                end = start + n_examples*5
-
-                # reset the index
-                rand_idxs_fix = [i for i in range(start, end)
-                                 if image_idxs[i] >= features_start and image_idxs[i] < features_start + n_examples]
 
                 for e in range(self.n_epochs):
-                    rand_idxs = np.random.permutation(rand_idxs_fix)[0:n_examples]
+                    rand_idxs = np.random.permutation(range(start, end))[0:n_examples]
                     captions1 = captions[rand_idxs]
                     image_idxs1 = image_idxs[rand_idxs]
                     print("Index: %d,Epochs: %d,Train Data Size: %d" % (index,e,len(image_idxs1)))
@@ -146,16 +126,10 @@ class CaptioningSolver(object):
                         captions_batch = captions1[i * self.batch_size:(i + 1) * self.batch_size]
                         image_idxs_batch = image_idxs1[i * self.batch_size:(i + 1) * self.batch_size] % features_size
                         features_batch = features[image_idxs_batch]
-                        # print("WH test", image_idxs_batch.shape)
-                        # print("WH test", image_idxs_batch)
+
                         feed_dict = {self.model.features: features_batch, self.model.captions: captions_batch}
                         _, l = sess.run([train_op, loss], feed_dict)
                         curr_loss += l
-
-                        # write summary for tensorboard visualization
-                        if i % 10 == 0:
-                            summary = sess.run(summary_op, feed_dict)
-                            summary_writer.add_summary(summary, e * n_iters_per_epoch + i)
 
                         if (i + 1) % self.print_every == 0:
                             print("\nTrain loss at epoch %d & iteration %d (mini-batch): %.5f" % (e + 1, i + 1, l))
@@ -173,26 +147,11 @@ class CaptioningSolver(object):
                     prev_loss = curr_loss
                     curr_loss = 0
 
-                    '''
-                    # print out BLEU scores and file write
-                    if self.print_bleu:
-                        all_gen_cap = np.ndarray((val_features.shape[0], 20))
-                        for i in range(n_iters_val):
-                            features_batch = val_features[i * self.batch_size:(i + 1) * self.batch_size]
-                            feed_dict = {self.model.features: features_batch}
-                            gen_cap = sess.run(generated_captions, feed_dict=feed_dict)
-                            all_gen_cap[i * self.batch_size:(i + 1) * self.batch_size] = gen_cap
-    
-                        all_decoded = decode_captions(all_gen_cap, self.model.idx_to_word)
-                        save_pickle(all_decoded, "./data/val/val.candidate.captions.pkl")
-                        scores = evaluate(data_path='./data', split='val', get_scores=True)
-                        write_bleu(scores=scores, path=self.model_path, epoch=e)
-                '''
                     # save model's parameters
                     if (e + 1) % self.save_every == 0:
                         saver.save(sess, os.path.join(self.model_path, 'model'), global_step=e + 1)
                         print("model-%s saved." % (e + 1))
-                save_pickle(index,"log/now_index.pkl")
+                save_pickle(index,"ch_log/now_index.pkl")
     def test(self, data, split='train', attention_visualization=True, save_sampled_captions=True):
         '''
         Args:
@@ -221,9 +180,9 @@ class CaptioningSolver(object):
             feed_dict = {self.model.features: features_batch}
             alps, bts, sam_cap = sess.run([alphas, betas, sampled_captions], feed_dict)  # (N, max_len, L), (N, max_len)
             decoded = decode_captions(sam_cap, self.model.idx_to_word)
-
+            num = 10
             if attention_visualization:
-                for n in range(10):
+                for n in range(num):
                     print("Sampled Caption: %s" % decoded[n])
 
                     # Plot original image

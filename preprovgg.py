@@ -11,17 +11,17 @@ vggnet.build()
 # batch size for extracting feature vectors from vggnet.
 batch_size = 80
 # because limited by get the feature
-feature_size = 8000
+feature_size = 10000
 with tf.Session() as sess:
     tf.global_variables_initializer().run()
     for split in ['train']:
-        anno_path = './data/%s/%s.annotations.pkl' % (split, split)
-        annotations = load_pickle(anno_path)
+        anno_path = './ch_data/%s/%s.file.names.pkl' % (split, split)
+        file_name = load_pickle(anno_path)
 
-        image_path = list(annotations['file_name'].unique())
+        image_path = list(file_name)
         num = int(np.ceil(len(image_path) / feature_size))
-        for i in range(2,num):
-            save_path = './data/%s/%s.features%d.hkl' % (split, split, i)
+        for i in range(0,num):
+            save_path = './ch_data/%s/%s.features%d.hkl' % (split, split, i)
             n_examples = feature_size if i < num - 1 else len(image_path) - feature_size * i
             all_feats = np.ndarray([n_examples, 196, 512], dtype=np.float32)
             s1 = i*feature_size
